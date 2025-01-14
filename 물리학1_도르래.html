@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>물체계의 운동 연습</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+
+    #problem-img {
+      max-width: 100%;
+      height: auto;
+    }
+    input {
+      font-size: 16px;
+    }
+    #answer-form {
+      margin-top: 20px;
+    }
+
+    #answer-form div {
+      margin-bottom: 10px;
+    }
+
+    #answer-result {
+      font-size: 1.2em;
+      margin-top: 10px;
+    }
+
+    #next-button {
+      margin-top: 20px;
+      font-size: 1.2em;
+    }
+
+    #level,
+    #score {
+      float: none;
+      display: inline-block;
+      margin-right: 10px;
+    }
+
+    #result-display {
+      display: inline-block;
+      font-size: 1.3em;
+      margin-top: 10px;
+    }
+
+    #credit {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      font-size: 1.3em;
+    }
+
+    #message {
+      font-size: 1.3em;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <img
+    src="https://cafeptthumb-phinf.pstatic.net/MjAyNDAzMTNfMTkz/MDAxNzEwMjk2NjA5NjIw.1vfaOssgYAtJV1yp_59bHnNmHcO2tlXbI447ktfU_5Ig.GC8hhCG9XaB03EJB49wKzs7inFyfELTU0Lppl4ye0LIg.PNG/image.png?type=w1600"
+    style="width: 80%; height: auto;">
+  <div id="status">
+    레벨: <span id="level">1</span> | 점수: <span id="score">0</span>
+  </div>
+  <p id="problem-text">문제가 여기에 표시됩니다.</p>
+  <canvas id="problem-canvas" width="350" height="250"></canvas>
+  <div id="problem-container">
+    <form id="answer-form"></form>
+    <br></br>
+    <button type="button" onclick="checkAnswer()" style="font-size: 1em;">정답 확인</button>
+    <button type="button" onclick="nextProblem()" style="font-size: 1em;">다음 문제</button>
+    <p id="message"></p>
+    <button type="button" onclick="shareScore()" style="font-size: 1em;">기록 공유</button>
+  </div>
+  <div id="credit">조준현T</div>
+
+  <script>
+    let currentProblem = {};
+    let problemStage = 1;
+    let score = 0;
+    let problemChecked = false;
+
+    function generateProblem() {
+      const gravity = 10; // 중력 가속도 (m/s²)
+
+      let massA, massB, massC, acceleration, tensions;
+
+      do {
+        massA = Math.floor(Math.random() * 30) + 1;
+        massB = Math.floor(Math.random() * 30) + 1;
+        if (problemStage === 1 && massA === massB) continue; // 1단계: 질량이 같으면 제외
+        if (problemStage >= 2) {
+          massC = Math.floor(Math.random() * 30) + 1;
+        }
+
+        if (problemStage === 1) {
+          const netForce = massB * gravity;
+          acceleration = netForce / (massA + massB);
+          tensions = [massA * acceleration]; // 줄 p의 장력
+        } else if (problemStage === 2) {
+          const netForce = massC * gravity + massB * gravity;
+          acceleration = netForce / (massA + massB + massC);
+          tensions = [
+            massA * acceleration, // 줄 p
+            massC * gravity - massC * acceleration, // 줄 q
+          ];
+        } else if (problemStage === 3) {
+          const netForce = Math.abs(massB * gravity - massC * gravity);
+          acceleration = netForce / (massA + massB + massC);
+
+          if (massB > massC) {
+            tensions = [
+              massB * gravity - massB * acceleration, // 줄 p
+              massC * acceleration + massC * gravity, // 줄 q
+            ];
+          } else if (massC > massB) {
+            tensions = [
+              massB * acceleration + massB * gravity, // 줄 p
+              massC * gravity - massC * acceleration, // 줄 q
+            ];
+          } else if (massB === massC) {
+            tensions = [
+              massB * gravity, // 줄 p (B의 중력)
+              massC * gravity, // 줄 q (C의 중력)
+            ];
+            acceleration = 0; // B와 C가 같으면 가속도는 0
+          }
+        }
+      } while (
+        acceleration % 1 !== 0 || tensions.some((t) => t % 1 !== 0)
+      );
+
+      currentProblem = { massA, massB, massC, acceleration, tensions };
+
+      let problemText = "";
+      if (problemStage === 1) {
+        problemText = `[ 가속도와 장력 Tp의 크기를 구하시오. ]`;
+      } else if (problemStage === 2) {
+        problemText = `[ 가속도와 장력 Tp, Tq의 크기를 구하시오. ]`;
+      } else if (problemStage === 3) {
+        problemText = `[ 가속도와 장력 Tp, Tq의 크기를 구하시오. ]`;
+      }
+      document.getElementById("problem-text").textContent = problemText;
+
+      const form = document.getElementById("answer-form");
+      form.innerHTML = `
+        <label>가속도 (m/s²): </label>
+        <input type="number" id="input-acceleration" step="1"><br>
+      `;
+      tensions.forEach((_, idx) => {
+        form.innerHTML += `
+          <label>줄 ${String.fromCharCode(112 + idx)}의 장력 (N): </label>
+          <input type="number" id="input-tension-${idx}" step="1"><br>
+        `;
+      });
+
+      drawProblem();
+    }
+
+    function drawProblem() {
+      const canvas = document.getElementById("problem-canvas");
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const offsetX = canvas.width / 2 - 200;
+      const offsetY = canvas.height / 2 - 150;
+
+      ctx.fillStyle = "#EEEEEE";
+      ctx.fillRect(100 + offsetX, 50 + offsetY, 200, 20);
+      ctx.fillRect(280 + offsetX, 50 + offsetY, 20, 200);
+      if (problemStage === 3) {
+        ctx.fillRect(80 + offsetX, 50 + offsetY, 20, 200);
+      }
+
+      ctx.beginPath();
+      ctx.arc(300 + offsetX, 50 + offsetY, 20, 0, 2 * Math.PI);
+      ctx.stroke();
+
+      if (problemStage === 3) {
+        ctx.beginPath();
+        ctx.arc(80 + offsetX, 50 + offsetY, 20, 0, 2 * Math.PI);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(170 + offsetX, 50 + offsetY);
+        ctx.lineTo(80 + offsetX, 50 + offsetY);
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(170 + offsetX, 50 + offsetY);
+      ctx.lineTo(300 + offsetX, 50 + offsetY);
+      ctx.moveTo(300 + offsetX, 50 + offsetY);
+      ctx.lineTo(300 + offsetX, 100 + offsetY);
+      if (problemStage === 2) {
+        ctx.lineTo(300 + offsetX, 200 + offsetY);
+      } else if (problemStage === 3) {
+        ctx.moveTo(80 + offsetX, 50 + offsetY);
+        ctx.lineTo(80 + offsetX, 100 + offsetY);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = "#B3D9FF";
+      ctx.fillRect(170 + offsetX, 30 + offsetY, 40, 40);
+      ctx.fillStyle = "black";
+      ctx.fillText(`A (${currentProblem.massA}kg)`, 175 + offsetX, 55 + offsetY);
+
+      ctx.fillStyle = "#FFC1C1";
+      ctx.fillRect(280 + offsetX, 100 + offsetY, 40, 40);
+      ctx.fillStyle = "black";
+      ctx.fillText(`B (${currentProblem.massB}kg)`, 285 + offsetX, 125 + offsetY);
+
+      if (problemStage >= 2) {
+        ctx.fillStyle = "#C1FFC1";
+        const cx = problemStage === 3 ? 60 + offsetX : 280 + offsetX;
+        const cy = problemStage === 3 ? 100 + offsetY : 200 + offsetY;
+        ctx.fillRect(cx, cy, 40, 40);
+        ctx.fillStyle = "black";
+        ctx.fillText(`C (${currentProblem.massC}kg)`, cx + 5, cy + 25);
+      }
+
+      ctx.fillStyle = "black";
+      ctx.fillText("p", 250 + offsetX, 45 + offsetY);
+      ctx.fillText("g=10m/s²", canvas.width / 2 - 30, canvas.height / 2 + 00);
+      if (problemStage >= 2) {
+        const qx = problemStage === 3 ? 125 + offsetX : 310 + offsetX;
+        const qy = problemStage === 3 ? 45 + offsetY : 170 + offsetY;
+        ctx.fillText("q", qx, qy);
+      }
+
+      if (score >= 30) {
+        ctx.fillStyle = "green";
+        ctx.font = "30px Arial";
+        ctx.fillText("VICTORY!!!", canvas.width / 2 - 70, canvas.height / 2 + 100);
+      }
+    }
+
+    function updateStatus() {
+      const level = Math.min(Math.floor(score / 10) + 1, 3); // 레벨 계산
+      document.getElementById("level").textContent = level;
+      document.getElementById("score").textContent = score;
+
+      // 점수에 따라 problemStage 업데이트
+      problemStage = level;
+
+      // 30점 이상이면 VICTORY 처리
+      if (score >= 30) {
+        document.getElementById("message").textContent = "VICTORY! 모든 난이도를 완료했습니다.";
+        document.getElementById("answer-form").innerHTML = ""; // 입력 폼 제거
+        document.getElementById("problem-text").textContent = "";
+      }
+    }
+
+    function checkAnswer() {
+      if (problemChecked) return;
+
+      const userAcceleration = parseInt(document.getElementById("input-acceleration").value, 10);
+      const userTensions = currentProblem.tensions.map((_, idx) =>
+        parseInt(document.getElementById(`input-tension-${idx}`).value, 10)
+      );
+
+      const isAccelerationCorrect = userAcceleration === currentProblem.acceleration;
+      const areTensionsCorrect = userTensions.every((t, idx) => t === currentProblem.tensions[idx]);
+
+      if (isAccelerationCorrect && areTensionsCorrect) {
+        score += 2;
+        document.getElementById("message").textContent = "정답입니다!";
+      } else {
+        score = Math.max(0, score - 2);
+        document.getElementById("message").textContent = `오답입니다. 정답은 ${currentProblem.acceleration} m/s², ${currentProblem.tensions.join(", "
+        )} N 입니다.`;
+      }
+      problemChecked = true;
+      updateStatus();
+    }
+
+    function nextProblem() {
+      document.getElementById("message").textContent = ``;
+      if (!problemChecked) {
+        alert("정답 확인을 먼저 해주세요.");
+        return;
+      }
+      problemChecked = false;
+      generateProblem();
+    }
+
+    function shareScore() {
+      alert(`점수: ${score}, 레벨: ${Math.min(Math.floor(score / 10) + 1, 3)}`);
+    }
+
+    window.onload = generateProblem;
+  </script>
+</body>
+
+</html>
